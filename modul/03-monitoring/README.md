@@ -229,7 +229,7 @@ Jebakan:
 - Load test di mesin yang sama dengan yang diuji membuat SSH tersendat. Jalankan
   dari VM lain, durasi 5 sampai 10 detik.
 
-### k6 (DOKUMENTASI)
+### k6 (demo instruktur)
 
 ```bash
 apt-get install -y gnupg

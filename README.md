@@ -41,8 +41,8 @@ Total 5 jam 35 menit. Satu hari dengan istirahat.
 - Satu mesin kedua untuk menguji firewall, fail2ban, dan load test.
 
 Sub-topik yang butuh akun pihak ketiga: Tailscale (1.5), Let's Encrypt dan
-Cloudflare Tunnel (2.3), bot Telegram atau webhook Discord (4.4). Ketiganya
-bertanda DOKUMENTASI karena tidak bisa diuji tanpa akun.
+Cloudflare Tunnel (2.3), bot Telegram atau webhook Discord (4.4). Bagian yang
+ditandai "demo instruktur" hanya ditampilkan, tidak dijalankan peserta.
 
 ## Cheat sheet
 

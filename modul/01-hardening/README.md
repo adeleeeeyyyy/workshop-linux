@@ -285,7 +285,7 @@ Jebakan:
 - Tailscale butuh UDP 41641 keluar. Kalau diblokir, trafik lewat relay DERP dan
   lebih lambat.
 
-### Alternatif: WireGuard (DOKUMENTASI)
+### Alternatif: WireGuard (demo instruktur)
 
 ```bash
 apt-get install -y wireguard

@@ -134,7 +134,7 @@ find /var/backups/app -maxdepth 1 -name '*.tar.gz' -mtime +7 -print
 ls /var/backups/app
 ```
 
-Database server (DOKUMENTASI, tidak diuji di modul ini):
+Database server (demo instruktur, butuh server database):
 
 ```bash
 # PostgreSQL

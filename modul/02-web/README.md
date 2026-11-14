@@ -252,7 +252,7 @@ curl -s https://<domain>/                                       # error 60, self
 `http2 on;` sintaks nginx 1.25.1 ke atas. Di nginx 1.24 ke bawah tulis
 `listen 443 ssl http2;`.
 
-### Let's Encrypt (DOKUMENTASI, butuh domain publik)
+### Let's Encrypt (demo instruktur, butuh domain publik)
 
 ```bash
 apt-get install -y certbot python3-certbot-nginx
@@ -264,7 +264,7 @@ systemctl list-timers 'certbot*'
 Syarat: DNS `<domain>` mengarah ke IP publik VM, port 80 bisa dijangkau dari
 internet. Domain yang hanya ada di `/etc/hosts` tidak bisa divalidasi.
 
-### Cloudflare Tunnel (DOKUMENTASI, tanpa IP publik)
+### Cloudflare Tunnel (demo instruktur, tanpa IP publik)
 
 ```bash
 curl -fsSL -o /tmp/cloudflared.deb \
