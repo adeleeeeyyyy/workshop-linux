@@ -128,7 +128,7 @@ sha256sum -c /var/backups/app/*.sha256
 tar tzf /var/backups/app/app-*.tar.gz
 
 # retensi: buat file tua, uji dengan -print dulu sebelum -delete
-touch -d '10 days ago' /var/backups/app/app-2020-01-01_0000.tar.gz
+touch -d '10 days ago' /var/backups/app/app-lama.tar.gz
 find /var/backups/app -maxdepth 1 -name '*.tar.gz' -mtime +7 -print
 /usr/local/bin/backup.sh
 ls /var/backups/app
