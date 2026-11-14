@@ -1,38 +1,32 @@
-# Topik 2 — Web, Service & Performance Readiness
+# Modul 2: Web, Service & Performance Readiness
 
-Estimasi waktu: **110 menit** (4 sub-topik).
+Setiap sub-topik berdiri sendiri. Backend contoh disediakan di dalam tiap
+sub-topik, jadi tidak ada ketergantungan antar bagian.
 
-Lingkungan uji fact-check: Debian GNU/Linux 13.1 (trixie), 1 vCPU, 1 GB RAM,
-nginx 1.26.3, systemd 257 (257.8-1~deb13u2), OpenSSL 3.5.1, wrk 4.1.0,
-apache2-utils 2.4.71.
-Semua perintah dijalankan di mesin uji pada 14 November 2026 kecuali yang
-ditandai DOKUMENTASI.
+Total 95 menit untuk keempat sub-topik.
 
-## Prasyarat / kondisi awal VM
-
-- Topik 1 selesai: user `ops` ada, SSH key bekerja, UFW aktif dengan
-  `22/tcp` terbuka, fail2ban jalan.
-- Python 3 tersedia: `python3 --version` → `Python 3.13.5`.
-- Port 80 dan 443 belum dipakai aplikasi lain:
-  `ss -tlnp | grep -E ':80|:443'` → kosong.
+Konvensi:
+- `<IP-VM>` IP VM, `<domain>` nama host contoh `app.lab.test`.
+- Semua perintah sebagai `root`.
+- OS uji Debian 13.1, nginx 1.26.3. Detail: `verifikasi/FACT-CHECK.md`.
 
 ---
 
-## 2.1 Custom systemd service — 30 menit
+## 2.1 Menjalankan aplikasi sebagai systemd service · 25 menit
 
-Tujuan: aplikasi backend berjalan sebagai service yang otomatis start saat boot,
-otomatis restart saat crash, log terpusat di journal, dan berjalan sebagai user
-non-root.
+Hasil: aplikasi jalan otomatis saat boot, restart sendiri saat crash, log masuk
+journal, dan berjalan sebagai user non-root.
 
-Kita pakai backend Python stdlib supaya tidak ada dependency yang harus
-di-install peserta. Yang dipelajari adalah **unit file**-nya, bukan aplikasinya —
-pola yang sama berlaku untuk Node, Go, atau Java.
-
-### Langkah 1 — Aplikasi dan direktori
+Prasyarat: root, `python3` terpasang (`apt-get install -y python3`), port 8080
+kosong (`ss -tlnp | grep 8080` tanpa hasil).
 
 ```bash
-mkdir -p /opt/hello /etc/hello
-cat > /opt/hello/app.py <<'PY'
+# 1. user khusus aplikasi
+useradd --system --no-create-home --shell /usr/sbin/nologin appsvc
+
+# 2. aplikasi contoh (Python stdlib, tanpa dependency)
+mkdir -p /opt/demo /etc/demo
+cat > /opt/demo/app.py <<'PY'
 #!/usr/bin/env python3
 import json, os, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -42,63 +36,38 @@ START = time.time()
 
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
-        data = {"app": "hello", "path": self.path,
-                "uptime_s": round(time.time() - START, 1),
-                "host": os.uname().nodename}
-        if self.path.startswith("/big"):
-            data["blob"] = "x" * 2048
-        body = json.dumps(data).encode()
+        body = json.dumps({"path": self.path,
+                           "uptime_s": round(time.time() - START, 1)}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
     def log_message(self, fmt, *a):
-        print("%s %s" % (self.address_string(), fmt % a), flush=True)
+        print(self.address_string(), fmt % a, flush=True)
 
 ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
 PY
-chown -R ops:ops /opt/hello
-```
+chown -R appsvc:appsvc /opt/demo
 
-Endpoint `/big` mengembalikan ~2 KB — dipakai di 2.4 untuk membuktikan gzip
-benar-benar bekerja (respons kecil tidak dikompres).
+# 3. nilai yang berubah per lingkungan, tidak masuk unit file
+printf 'PORT=8080\n' > /etc/demo/demo.env
+chmod 600 /etc/demo/demo.env
 
-Kenapa listen di `127.0.0.1`, bukan `0.0.0.0`: aplikasi hanya perlu dijangkau
-reverse proxy di mesin yang sama. Ini menghapus satu permukaan serangan dan
-membuat UFW tidak perlu membuka port 8080.
-
-### Langkah 2 — Environment file dengan permission benar
-
-```bash
-printf 'PORT=8080\n' > /etc/hello/hello.env
-chmod 600 /etc/hello/hello.env
-ls -l /etc/hello/hello.env
-```
-
-Harus muncul `-rw------- 1 root root`.
-
-Kenapa dipisah: nilai yang berubah per lingkungan (port, kredensial DB, token)
-tidak boleh masuk ke unit file atau repo git. `EnvironmentFile` dibaca systemd
-sebelum `ExecStart`, jadi secret tidak perlu pernah ada di command line
-(di mana `ps aux` bisa membacanya).
-
-### Langkah 3 — Unit file
-
-```bash
-cat > /etc/systemd/system/hello.service <<'UNIT'
+# 4. unit file
+cat > /etc/systemd/system/demo.service <<'UNIT'
 [Unit]
-Description=hello demo API
+Description=demo API
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=ops
-Group=ops
-WorkingDirectory=/opt/hello
-EnvironmentFile=/etc/hello/hello.env
-ExecStart=/usr/bin/python3 /opt/hello/app.py
+User=appsvc
+Group=appsvc
+WorkingDirectory=/opt/demo
+EnvironmentFile=/etc/demo/demo.env
+ExecStart=/usr/bin/python3 /opt/demo/app.py
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=yes
@@ -109,92 +78,71 @@ ProtectHome=yes
 [Install]
 WantedBy=multi-user.target
 UNIT
+
+# daemon-reload wajib tiap kali unit file berubah
 systemctl daemon-reload
-systemctl enable --now hello
+systemctl enable --now demo
 ```
 
-Penjelasan baris yang sering ditanya:
-- `Type=simple` — proses langsung jalan di foreground. Pakai `forking` hanya
-  kalau aplikasi benar-benar mendemonisasi diri sendiri.
-- `Restart=on-failure` — restart hanya kalau exit code ≠ 0 atau kena signal.
-  `Restart=always` akan ikut me-restart saat stop manual yang gagal bersih.
-- `RestartSec=3` — jeda, mencegah restart loop menghantam CPU.
-- `ProtectSystem=strict` — seluruh filesystem read-only kecuali yang
-  dikecualikan. Aplikasi yang perlu menulis harus diberi `ReadWritePaths=`.
-- `daemon-reload` **wajib** setiap kali unit file berubah; tanpa ini systemd
-  masih memakai versi lama di memori.
-
-### Langkah 4 — Verifikasi
+Verifikasi:
 
 ```bash
-systemctl is-active hello
-systemctl show -p MainPID -p User --value hello
+systemctl is-active demo                 # active
+systemctl show -p User -p MainPID --value demo
+curl -s http://127.0.0.1:8080/           # JSON dengan uptime_s
+ss -tlnp | grep 8080                     # listen di 127.0.0.1, dipegang appsvc
+
+kill -9 $(systemctl show -p MainPID --value demo); sleep 5
+systemctl show -p NRestarts --value demo # 1
+systemctl is-active demo                 # active
+```
+
+Error umum:
+
+| Gejala | Sebab | Solusi |
+|---|---|---|
+| `status=203/EXEC` | path di `ExecStart` salah | cek `ls -l /usr/bin/python3 /opt/demo/app.py` |
+| `status=200/CHDIR` | `WorkingDirectory` tidak ada | buat direktori, cek permission |
+| Service `activating` terus, `MainPID` 0 | port 8080 sudah dipakai proses lain | `ss -tlnp \| grep 8080`, hentikan proses itu atau ganti `PORT` |
+| Restart terus tanpa henti | aplikasi crash karena config | `journalctl -u demo -n 30`, perbaiki config |
+| Gagal menulis file | `ProtectSystem=strict` membuat FS read-only | tambahkan `ReadWritePaths=/path` |
+
+Jebakan:
+- `Restart=always` ikut me-restart saat stop manual yang tidak bersih. Pakai
+  `on-failure` untuk service normal.
+- `ProtectSystem=strict` membaca seluruh filesystem sebagai read-only kecuali
+  `/dev`, `/proc`, `/sys`. Aplikasi yang menulis file butuh `ReadWritePaths`.
+- Lupa `daemon-reload` membuat perubahan unit tidak berefek.
+
+---
+
+## 2.2 Reverse proxy nginx dan pemetaan domain lokal · 20 menit
+
+Hasil: `http://<domain>` dilayani nginx dan diteruskan ke aplikasi di port 8080.
+
+Prasyarat: root, `python3` dan `nginx` terpasang. Backend bisa aplikasi apa pun
+di `127.0.0.1:8080`. Kalau belum ada, pakai server contoh berikut.
+
+```bash
+# backend contoh sementara (2 detik setelah dijalankan)
+mkdir -p /srv/backend
+printf 'backend ok\n' > /srv/backend/index.html
+cd /srv/backend && nohup python3 -m http.server 8080 --bind 127.0.0.1 >/dev/null 2>&1 &
+sleep 2
 curl -s http://127.0.0.1:8080/
-curl -s http://127.0.0.1:8080/big | wc -c
-ss -tlnp | grep 8080
 ```
 
-Output yang diharapkan:
-
-```
-active
-<pid>
-ops
-{"app": "hello", "path": "/", "uptime_s": 1.8, "host": <hostname>}
-2135
-LISTEN 0 5  127.0.0.1:8080  0.0.0.0:*  users:(("python3",pid=...,fd=3))
-```
-
-Bagian penting: `users:(("python3",pid=2958,fd=3))` — proses dimiliki `ops`,
-bukan `root`, dan hanya listen di loopback.
-
-### Langkah 5 — Buktikan restart otomatis
-
-```bash
-kill -9 $(systemctl show -p MainPID --value hello)
-sleep 5
-systemctl show -p MainPID -p NRestarts --value hello
-systemctl is-active hello
-journalctl -u hello -n 4 --no-pager
-```
-
-Output yang diharapkan: PID baru, `NRestarts=1`, `active`, dan journal berisi:
-
-```
-hello.service: Main process exited, code=killed, status=9/KILL
-hello.service: Scheduled restart job, restart counter is at 1.
-Started hello demo API.
-```
-
-Kenapa `kill -9`: meniru crash hard. `kill -TERM` akan membuat systemd
-menganggapnya stop normal dan **tidak** menghitung restart.
-
-### 2.2 Nginx reverse proxy + local hosts — 25 menit
-
-Tujuan: pengguna mengakses `http://hello.lab.test`, nginx meneruskan ke
-aplikasi di port 8080.
-
-### Langkah 1 — Install nginx
+Pasang nginx dan vhost:
 
 ```bash
 apt-get install -y nginx
-nginx -v
-systemctl is-active nginx
-ss -tlnp | grep ':80'
-```
 
-Output: `nginx version: nginx/1.26.3`, `active`, ada listener di `0.0.0.0:80`.
-
-### Langkah 2 — Site config
-
-```bash
-cat > /etc/nginx/sites-available/hello.conf <<'NGX'
+cat > /etc/nginx/sites-available/app.conf <<'NGX'
 server {
     listen 80;
-    server_name hello.lab.test;
+    server_name <domain>;
 
-    access_log /var/log/nginx/hello.access.log;
-    error_log  /var/log/nginx/hello.error.log;
+    access_log /var/log/nginx/app.access.log;
 
     location / {
         proxy_pass http://127.0.0.1:8080;
@@ -206,473 +154,249 @@ server {
     }
 }
 NGX
-ln -sf /etc/nginx/sites-available/hello.conf /etc/nginx/sites-enabled/hello.conf
+
+ln -sf /etc/nginx/sites-available/app.conf /etc/nginx/sites-enabled/app.conf
 nginx -t
 systemctl reload nginx
+
+# pemetaan nama lokal, dan buka port di firewall
+echo '127.0.0.1 <domain>' >> /etc/hosts
+ufw allow 80/tcp      # kalau UFW terpasang
 ```
 
-Kenapa `proxy_set_header X-Forwarded-For`: tanpa ini aplikasi hanya melihat
-`127.0.0.1` sebagai IP klien, sehingga rate limit per-IP dan log audit di
-aplikasi jadi tidak berguna.
-
-Kenapa `reload` bukan `restart`: reload mengganti worker secara graceful tanpa
-memutus koneksi aktif.
-
-### Langkah 3 — Pemetaan nama lokal
+Verifikasi:
 
 ```bash
-echo '127.0.0.1 hello.lab.test' >> /etc/hosts
-getent hosts hello.lab.test
-curl -s http://hello.lab.test/
+getent hosts <domain>                                  # 127.0.0.1 <domain>
+curl -s http://<domain>/                               # backend ok
+curl -s -o /dev/null -w '%{http_code}\n' http://<IP-VM>/   # 200 dari PC
 ```
 
-Output: `127.0.0.1 hello.lab.test` lalu JSON aplikasi.
+Error umum:
 
-Kenapa `/etc/hosts` di lab: tidak ada DNS internal di lab, dan `server_name`
-pada nginx hanya cocok kalau request membawa header `Host: hello.lab.test`.
-Uji tanpa file hosts juga bisa lewat `curl -H 'Host: hello.lab.test' http://127.0.0.1/`.
+| Gejala | Sebab | Solusi |
+|---|---|---|
+| `502 Bad Gateway` | backend mati atau port beda | `ss -tlnp \| grep 8080`, cek `proxy_pass` |
+| Halaman nginx default muncul | vhost lain menang | `ls -l /etc/nginx/sites-enabled/`, hapus symlink `default` |
+| `Job for nginx.service failed` | `nginx -t` gagal | baca baris `[emerg]`, perbaiki, reload lagi |
+| Timeout dari PC | UFW menutup port 80 | `ufw allow 80/tcp` |
 
-**Checkpoint**
-
-```bash
-curl -s -o /dev/null -w '%{http_code}\n' http://hello.lab.test/     # 200
-grep hello.lab.test /etc/hosts                                       # ada 1 baris
-```
-
-### Langkah 4 — Buka port di firewall
-
-```bash
-ufw allow 80,443/tcp
-ufw status
-```
-
-Output: `80,443/tcp ALLOW Anywhere`.
-
-Kenapa baru sekarang: port dibuka setelah ada yang mendengarkan. Kalau dibuka
-lebih dulu sejak Topik 1, peserta melihat "port tertutup" sebagai kegagalan.
-
-**Titik rawan 2.2 — urutan UFW vs nginx**
-
-Setelah `ufw allow 80,443/tcp`, request dari host lain tetap bisa ditolak kalau
-nginx tidak listen. Bukti dari uji: sebelum rule dibuka, `curl` dari laptop ke
-IP VM menghasilkan `host_http=000 rc=28` (timeout) — itu UFW. Sesudah rule
-dibuka, hasilnya `200`. Kalau peserta melihat timeout, selalu cek dua hal:
-`ss -tlnp | grep :80` dan `ufw status`.
+Jebakan:
+- `server_name` hanya cocok kalau request membawa header `Host` yang sama. Uji
+  tanpa `/etc/hosts` bisa pakai `curl -H 'Host: <domain>' http://127.0.0.1/`.
+- Tanpa `X-Forwarded-For`, aplikasi melihat semua klien sebagai `127.0.0.1`.
+  Log audit dan rate limit per IP jadi tidak berguna.
+- `systemctl reload nginx` gagal menyisakan worker lama tetap jalan. Situs
+  terlihat normal padahal config baru belum aktif. Selalu baca output
+  `nginx -t`.
 
 ---
 
-## 2.3 HTTPS dengan self-signed certificate — 20 menit
+## 2.3 HTTPS · 20 menit
 
-Tujuan: trafik terenkripsi; paham kapan self-signed cukup (internal/lab) dan
-kapan butuh CA publik.
+Hasil: situs dilayani HTTPS. Self-signed untuk lab internal, Let's Encrypt untuk
+domain publik.
 
-### Langkah 1 — Buat certificate
+Prasyarat: nginx terpasang (`apt-get install -y nginx`), port 80 dan 443 terbuka
+di firewall.
+
+### Self-signed (bisa dijalankan sekarang)
 
 ```bash
 openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
-  -keyout /etc/ssl/private/hello.lab.test.key \
-  -out /etc/ssl/certs/hello.lab.test.crt \
-  -subj "/C=ID/ST=DKI/L=Jakarta/O=Lab/CN=hello.lab.test" \
-  -addext "subjectAltName=DNS:hello.lab.test"
-chmod 600 /etc/ssl/private/hello.lab.test.key
-openssl x509 -in /etc/ssl/certs/hello.lab.test.crt -noout -subject -dates -ext subjectAltName
-```
+  -keyout /etc/ssl/private/<domain>.key \
+  -out /etc/ssl/certs/<domain>.crt \
+  -subj "/CN=<domain>" \
+  -addext "subjectAltName=DNS:<domain>"
+chmod 600 /etc/ssl/private/<domain>.key
 
-Output yang diharapkan:
+# isi statis untuk uji tanpa backend
+mkdir -p /srv/site
+printf 'https ok\n' > /srv/site/index.html
 
-```
-subject=C=ID, ST=DKI, L=Jakarta, O=Lab, CN=hello.lab.test
-notBefore=Nov 14 08:32:18 2026 GMT
-notAfter=Nov 14 08:32:18 2027 GMT
-X509v3 Subject Alternative Name:
-    DNS:hello.lab.test
-```
-
-Kenapa `-addext subjectAltName`: browser modern **mengabaikan** `CN` dan hanya
-memeriksa SAN. Certificate dengan CN benar tapi tanpa SAN akan tetap ditolak
-dengan error "certificate is not valid for this name".
-
-Kenapa `-nodes`: tanpa passphrase supaya nginx bisa membuka file saat boot
-(tidak ada yang bisa mengetik passphrase saat startup). Karena itu file key
-harus `chmod 600` dan dimiliki root.
-
-### Langkah 2 — Site dengan TLS dan redirect
-
-```bash
-cat > /etc/nginx/sites-available/hello.conf <<'NGX'
+cat > /etc/nginx/sites-available/tls.conf <<'NGX'
 server {
     listen 80;
-    server_name hello.lab.test;
+    server_name <domain>;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl;
     http2 on;
-    server_name hello.lab.test;
+    server_name <domain>;
 
-    ssl_certificate     /etc/ssl/certs/hello.lab.test.crt;
-    ssl_certificate_key /etc/ssl/private/hello.lab.test.key;
+    ssl_certificate     /etc/ssl/certs/<domain>.crt;
+    ssl_certificate_key /etc/ssl/private/<domain>.key;
     ssl_protocols TLSv1.2 TLSv1.3;
 
-    access_log /var/log/nginx/hello.access.log;
-    error_log  /var/log/nginx/hello.error.log;
-
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_http_version 1.1;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+    root  /srv/site;
+    index index.html;
 }
 NGX
-nginx -t
-systemctl reload nginx
+
+ln -sf /etc/nginx/sites-available/tls.conf /etc/nginx/sites-enabled/tls.conf
+nginx -t && systemctl reload nginx
+ufw allow 443/tcp     # kalau UFW terpasang
 ```
 
-Catatan versi: `http2 on;` adalah sintaks nginx ≥ 1.25.1. Pada nginx 1.24 ke
-bawah, protokol ditulis menempel di listen: `listen 443 ssl http2;`.
-Di Debian 13 (nginx 1.26.3) sintaks baru ini yang benar.
-
-### Langkah 3 — Verifikasi
+Verifikasi:
 
 ```bash
-curl -sk https://hello.lab.test/
-curl -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' http://hello.lab.test/
-curl -sS https://hello.lab.test/
+openssl x509 -in /etc/ssl/certs/<domain>.crt -noout -subject -ext subjectAltName
+curl -sk https://<domain>/                                      # https ok
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' http://<domain>/   # 301 ke https
+curl -s https://<domain>/                                       # error 60, self-signed
 ```
 
-Output yang diharapkan:
+`http2 on;` sintaks nginx 1.25.1 ke atas. Di nginx 1.24 ke bawah tulis
+`listen 443 ssl http2;`.
 
-```
-{...json...}
-301 -> https://hello.lab.test/
-curl: (60) SSL certificate problem: self-signed certificate
-```
-
-Perintah ketiga **harus** gagal: itu bukti bahwa certificate memang self-signed
-dan curl memverifikasi. Untuk lab, gunakan `-k` di semua perintah curl.
-Di produksi, jangan pernah memakai `-k` — itu mematikan verifikasi.
-
-### Langkah 4 — Ringkas: kapan pakai apa
-
-| Kebutuhan | Pilihan | Modul ini |
-|---|---|---|
-| Lab/internal, nama host lokal | Self-signed | dijalankan |
-| Domain publik, server punya IP publik + port 80 terbuka | Let's Encrypt via certbot | DOKUMENTASI |
-| Server tidak punya IP publik / di belakang NAT | Cloudflare Tunnel | DOKUMENTASI |
-
-Let's Encrypt (DOKUMENTASI):
+### Let's Encrypt (DOKUMENTASI, butuh domain publik)
 
 ```bash
 apt-get install -y certbot python3-certbot-nginx
-certbot --nginx -d hello.example.com
-systemctl list-timers 'certbot*'    # renew otomatis 2x sehari
+certbot --nginx -d <domain> -d www.<domain>
+certbot renew --dry-run
+systemctl list-timers 'certbot*'
 ```
 
-Certbot gagal di lab karena domain `hello.lab.test` tidak bisa diresolusi
-publik — validasi HTTP-01 butuh Let's Encrypt menjangkau server. Karena itu
-tidak dijalankan.
+Syarat: DNS `<domain>` mengarah ke IP publik VM, port 80 bisa dijangkau dari
+internet. Domain yang hanya ada di `/etc/hosts` tidak bisa divalidasi.
 
-Cloudflare Tunnel (DOKUMENTASI):
+### Cloudflare Tunnel (DOKUMENTASI, tanpa IP publik)
 
 ```bash
-# di server
 curl -fsSL -o /tmp/cloudflared.deb \
   https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
 dpkg -i /tmp/cloudflared.deb
 cloudflared tunnel login
-cloudflared tunnel create hello
-cloudflared tunnel route dns hello hello.example.com
+cloudflared tunnel create app
+cloudflared tunnel route dns app <domain>
 cloudflared service install
 ```
 
-Alternatif via repo apt resmi Cloudflare: `pkg.cloudflare.com` (lihat
-https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
+Error umum:
+
+| Gejala | Sebab | Solusi |
+|---|---|---|
+| `curl: (60) self-signed certificate` | normal untuk self-signed | pakai `-k` di lab |
+| `nginx -t` gagal karena `http2` | nginx versi lama | `listen 443 ssl http2;` |
+| Browser menolak cert meski `CN` benar | SAN tidak ada | tambahkan `-addext "subjectAltName=DNS:<domain>"` |
+| Certbot gagal validasi | port 80 tertutup atau DNS salah | cek `ufw status`, `getent hosts <domain>` |
+
+Jebakan:
+- `-nodes` membuat key tanpa passphrase. Itu syarat nginx bisa start saat boot,
+  jadi file key wajib mode 600 dan milik root.
+- Jangan pakai `curl -k` di produksi. Itu mematikan verifikasi.
+- Redirect 80 ke 443 harus di vhost yang sama. Kalau `default` masih aktif,
+  request bisa mendarat di sana.
 
 ---
 
-## 2.4 Web performance tuning — 35 menit
+## 2.4 gzip, cache, dan rate limit · 30 menit
 
-Tujuan: gzip, cache, dan rate limit dibuktikan bekerja dengan angka, bukan
-dengan "sepertinya lebih cepat".
+Hasil: respons dikompres, konten di-cache, dan request berlebih ditolak 429.
 
-### Langkah 1 — Snippet global
-
-**Perangkap Debian:** `/etc/nginx/nginx.conf` bawaan paket Debian sudah berisi
-`gzip on;` di dalam blok `http`. Menaruh `gzip on;` lagi di
-`/etc/nginx/conf.d/*.conf` membuat `nginx -t` **gagal** dengan
-`"gzip" directive is duplicate` — dan karena `reload` ditolak, nginx tetap
-jalan dengan konfigurasi lama sehingga situs HTTPS belum aktif. Ini persis
-yang terjadi saat uji pertama.
+Prasyarat: nginx terpasang, port 80 terbuka. Backend contoh disediakan di bawah.
 
 ```bash
-mkdir -p /var/cache/nginx/hello
-cat > /etc/nginx/conf.d/tuning.conf <<'NGX'
-# gzip on; sudah aktif di /etc/nginx/nginx.conf (paket Debian) -> jangan diulang
-gzip_comp_level 5;
-gzip_min_length 256;
-gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
-gzip_vary on;
+# halaman statis 4 KB untuk uji gzip
+mkdir -p /srv/site
+printf 'index\n' > /srv/site/index.html
+yes 'data uji gzip untuk nginx' | head -c 4096 > /srv/site/big.txt
 
-proxy_cache_path /var/cache/nginx/hello levels=1:2 keys_zone=hello_cache:10m max_size=100m inactive=10m use_temp_path=off;
-
-limit_req_zone $binary_remote_addr zone=hello_rl:10m rate=10r/s;
-limit_conn_zone $binary_remote_addr zone=hello_conn:10m;
-limit_req_status 429;
-NGX
-nginx -t
+# backend contoh untuk uji cache
+mkdir -p /srv/backend
+printf 'backend ok\n' > /srv/backend/index.html
+cd /srv/backend && nohup python3 -m http.server 8080 --bind 127.0.0.1 >/dev/null 2>&1 &
+sleep 2
 ```
 
-Harus `syntax is ok` / `test is successful`. Kalau muncul pesan
-`"gzip" directive is duplicate`, berarti ada `gzip on;` yang ditulis dua kali —
-hapus salah satunya (yang di `nginx.conf` biarkan).
-
-Kenapa `limit_req_status 429`: default nginx membalas 503, yang membuat
-monitoring mengira server sedang down. 429 (Too Many Requests) adalah kode
-yang benar untuk rate limit.
-
-### Langkah 2 — Pakai di site
-
-Ganti isi `server` blok 443 dengan versi bertuning:
+Satu file untuk semua direktif. Dua file yang sama-sama menulis `gzip_comp_level`
+membuat `nginx -t` gagal `directive is duplicate`.
 
 ```bash
-cat > /etc/nginx/sites-available/hello.conf <<'NGX'
+cat > /etc/nginx/conf.d/tuning.conf <<'NGX'
+# gzip on; sudah ada di /etc/nginx/nginx.conf (paket Debian). Jangan diulang
+gzip_comp_level 5;
+gzip_min_length 256;
+gzip_types text/plain text/css application/json application/javascript;
+gzip_vary on;
+
+proxy_cache_path /var/cache/nginx/site levels=1:2 keys_zone=site_cache:10m max_size=50m inactive=10m use_temp_path=off;
+
+limit_req_zone $binary_remote_addr zone=site_rl:10m rate=10r/s;
+limit_req_status 429;
+NGX
+
+cat > /etc/nginx/sites-available/app.conf <<'NGX'
 server {
     listen 80;
-    server_name hello.lab.test;
-    return 301 https://$host$request_uri;
-}
+    server_name <domain>;
 
-server {
-    listen 443 ssl;
-    http2 on;
-    server_name hello.lab.test;
+    root  /srv/site;
+    index index.html;
 
-    ssl_certificate     /etc/ssl/certs/hello.lab.test.crt;
-    ssl_certificate_key /etc/ssl/private/hello.lab.test.key;
-    ssl_protocols TLSv1.2 TLSv1.3;
+    limit_req zone=site_rl burst=20 nodelay;
 
-    access_log /var/log/nginx/hello.access.log;
-    error_log  /var/log/nginx/hello.error.log;
+    location /      { try_files $uri $uri/ =404; }
 
-    limit_req  zone=hello_rl burst=20 nodelay;
-    limit_conn hello_conn 20;
+    location /api/  { proxy_pass http://127.0.0.1:8080/; }
 
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_http_version 1.1;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_cache hello_cache;
+    location /cached/ {
+        proxy_pass http://127.0.0.1:8080/;
+        proxy_cache site_cache;
         proxy_cache_valid 200 10s;
-        proxy_cache_use_stale error timeout updating;
         add_header X-Cache-Status $upstream_cache_status always;
     }
 }
 NGX
+
+ln -sf /etc/nginx/sites-available/app.conf /etc/nginx/sites-enabled/app.conf
 nginx -t && systemctl reload nginx
+echo '127.0.0.1 <domain>' >> /etc/hosts
 ```
 
-`add_header X-Cache-Status ... always` adalah trik verifikasi: setiap respons
-membawa status cache sehingga kita bisa membuktikan HIT tanpa membuka file
-cache.
+Direktori cache dibuat sendiri oleh nginx saat start.
 
-### Langkah 3 — Bukti cache
+Verifikasi:
 
 ```bash
-for i in 1 2 3; do
-  curl -sk -o /dev/null -D- https://hello.lab.test/ | grep -i x-cache-status
-done
+# gzip: 4096 byte jadi sekitar 72 byte
+curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w 'gzip=%{size_download}\n' http://<domain>/big.txt
+curl -s -o /dev/null -w 'plain=%{size_download}\n' http://<domain>/big.txt
+curl -s -H 'Accept-Encoding: gzip' -D- -o /dev/null http://<domain>/big.txt | grep -i content-encoding
+
+# cache: MISS lalu HIT
+for i in 1 2 3; do curl -s -o /dev/null -D- http://<domain>/cached/ | grep -i x-cache-status; done
+
+# rate limit: jalankan load, lalu lihat 429
+apt-get install -y wrk apache2-utils
+wrk -t2 -c20 -d5s http://<domain>/big.txt | grep -E 'requests in|Non-2xx|Requests/sec'
+grep -c ' 429 ' /var/log/nginx/access.log
 ```
 
-Output yang diharapkan:
+Angka uji di Debian 13.1, 1 vCPU: 4096 byte menjadi 72 byte, cache urutan
+`MISS, HIT, HIT`, 43.588 dari 43.658 request dapat 429, dan request tunggal
+kembali 200 setelah 3 detik.
 
-```
-x-cache-status: HIT
-x-cache-status: HIT
-x-cache-status: HIT
-```
+Error umum:
 
-Status yang mungkin muncul dan artinya: `MISS` (belum ada di cache), `HIT`
-(dilayani dari cache), `EXPIRED` (ada di cache tapi lewat TTL 10 detik, nginx
-mengambil ulang dari backend), `BYPASS`.
-
-Hasil uji nyata untuk dua jebakan yang sering ditanyakan:
-
-- `systemctl restart nginx` **tidak** mengosongkan cache — isi cache ada di
-  disk (`/var/cache/nginx/hello`). Setelah restart, respons tetap `HIT`.
-- Menunggu lebih dari 10 detik (`proxy_cache_valid 200 10s`) menghasilkan
-  `EXPIRED`, lalu request berikutnya `HIT` lagi.
-
-### Langkah 4 — Bukti gzip
-
-```bash
-curl -sk -H 'Accept-Encoding: gzip' -o /dev/null -w 'gzip_bytes=%{size_download}\n' https://hello.lab.test/big
-curl -sk -o /dev/null -w 'plain_bytes=%{size_download}\n' https://hello.lab.test/big
-curl -sk -H 'Accept-Encoding: gzip' -D- -o /dev/null https://hello.lab.test/big | grep -Ei 'content-encoding|vary'
-curl -sk -H 'Accept-Encoding: gzip' -D- -o /dev/null https://hello.lab.test/ | grep -Ei content-encoding || echo "tidak dikompres (di bawah gzip_min_length=256)"
-```
-
-Output yang diharapkan (nyata dari uji):
-
-```
-gzip_bytes=105
-plain_bytes=2135
-content-encoding: gzip
-vary: Accept-Encoding
-tidak dikompres (di bawah gzip_min_length=256)
-```
-
-Kenapa respons `/` tidak dikompres: ukurannya ~73 byte, di bawah
-`gzip_min_length 256`. Ini disengaja — mengompres payload kecil justru
-memperbesar ukuran karena header gzip.
-
-### Langkah 5 — Bukti rate limit dengan number
-
-```bash
-wrk -t2 -c20 -d10s --latency https://hello.lab.test/
-wrk -t2 -c20 -d10s https://hello.lab.test/ | grep -E 'requests in|Non-2xx|Requests/sec'
-grep ' 429 ' /var/log/nginx/hello.access.log | tail -1
-```
-
-Output yang diharapkan (tanpa rate limit dulu, sebagai baseline):
-
-```
-Requests/sec:   4619.56
-```
-
-Dengan `limit_req zone=hello_rl rate=10r/s`:
-
-```
-63627 requests in 10.02s
-Non-2xx or 3xx responses: 63508
-Requests/sec:   6348.51
-```
-
-Dan baris log:
-
-```
-127.0.0.1 - - [14/Nov/2026:08:33:48 +0000] "GET / HTTP/1.1" 429 162 "-" "-"
-```
-
-Penjelasan: 63.508 dari 63.627 request ditolak 429. Itu memang tujuan — hanya
-~10 request/detik per IP yang dilayani. Peserta sering heran "kenapa lebih besar
-Req/sec saat dibatasi": karena 429 dijawab nginx tanpa menyentuh backend, jadi
-lebih murah daripada 200.
-
-Kenapa 429 dan bukan error: klien yang patuh standar akan back-off saat
-menerima 429.
-
-**Jebakan yang wajib disebutkan:** setelah wrk selesai, IP Anda masih punya
-"utang" rate limit. `curl` berikutnya dari host yang sama bisa dapat `429`
-walau hanya satu request. Tunggu ~3 detik:
-
-```bash
-sleep 3; curl -sk -o /dev/null -w '%{http_code}\n' https://hello.lab.test/
-```
-
-Diuji: setelah 3 detik, hasil `200`. Request dari **IP lain** tidak terpengaruh
-karena zone-nya per `$binary_remote_addr` — diuji dari laptop: `ext_https=200`
-saat server sedang kena limit.
-
-### Langkah 6 — Verifikasi direktif benar-benar termuat
-
-```bash
-nginx -T 2>/dev/null | grep -E 'gzip_comp_level 5|limit_req zone=hello_rl|proxy_cache hello_cache'
-```
-
-Harus mengeluarkan minimal 3 baris (satu per direktif). `nginx -T` mencetak
-konfigurasi hasil gabungan — satu-satunya cara cepat memastikan file Anda
-benar-benar ikut dibaca.
-
----
-
-## Titik rawan
-
-### 1. `gzip on` duplikat mematikan reload (sudah terbukti di uji)
-
-Gejala: `nginx -t` → `"gzip" directive is duplicate in /etc/nginx/conf.d/tuning.conf:1`,
-`systemctl reload nginx` gagal, situs HTTPS tidak aktif, `curl https://` →
-empty response. Pencegahan: cek `grep -n gzip /etc/nginx/nginx.conf` sebelum
-menambah snippet. Rollback: `rm /etc/nginx/conf.d/tuning.conf; nginx -t; systemctl reload nginx`.
-
-### 2. `certbot` tidak bisa memvalidasi domain `.test`
-
-Validasi HTTP-01 butuh Let's Encrypt menjangkau `http://domain/.well-known/...`.
-Domain yang hanya ada di `/etc/hosts` tidak bisa divalidasi. Jangan buang waktu
-peserta di lab — sebut sebagai demo konsep.
-
-### 3. `Restart=always` + aplikasi yang gagal terus
-
-Kalau aplikasi crash karena konfigurasi salah, `Restart=always` membuat
-systemd mencoba selamanya dan `journalctl` penuh. Pakai `Restart=on-failure`
-dengan `RestartSec`, dan batasi kalau perlu: `StartLimitBurst=5`,
-`StartLimitIntervalSec=60`.
-
-### 4. Aplikasi listen di `0.0.0.0` + UFW longgar
-
-Kalau `ExecStart` diubah mendengarkan `0.0.0.0:8080` dan UFW dibuka untuk 8080,
-pengguna bisa bypass nginx (rate limit, TLS, header keamanan semuanya hilang).
-Biarkan loopback.
-
-### 5. Lupa `daemon-reload` setelah edit unit
-
-Gejala: perubahan unit tidak berpengaruh, bahkan setelah `restart`.
-Ingat urutan: edit → `systemctl daemon-reload` → `systemctl restart`.
-
----
-
-## Troubleshooting
-
-| Gejala | Penyebab | Solusi |
+| Gejala | Sebab | Solusi |
 |---|---|---|
-| `Job for nginx.service failed` setelah `reload` | `nginx -t` gagal: direktif duplikat atau path cert salah | `nginx -t` dulu, baca baris `[emerg]`, perbaiki, ulangi |
-| nginx 502 Bad Gateway | Backend mati atau port salah | `systemctl is-active hello`; `ss -tlnp \| grep 8080`; `curl -s http://127.0.0.1:8080/` |
-| `curl https://hello.lab.test` → empty / connection refused | nginx tidak listen 443 karena reload gagal, atau UFW belum allow 443 | `nginx -t`; `ss -tlnp \| grep 443`; `ufw status` |
-| `curl: (60) self-signed certificate` | Normal untuk self-signed | pakai `-k` di lab; jangan di produksi |
-| `hello.service: Failed with result 'exit-code'` berulang | Aplikasi crash; `ProtectSystem=strict` menghalangi tulis file | `journalctl -u hello -n 30`; tambah `ReadWritePaths=/path` |
-| Semua request dapat 429 padahal baru 1 | Rate limit dari uji beban sebelumnya | tunggu 3 detik, atau `limit_req ... burst` dinaikkan |
-| `X-Cache-Status` selalu MISS | Respons punya `Set-Cookie`/`Cache-Control: no-store`, atau `proxy_cache_valid` tidak cocok | cek header respons; sesuaikan `proxy_cache_valid` |
+| `"gzip" directive is duplicate` | `gzip on;` ditulis dua kali | hapus salah satu, sisakan yang di `nginx.conf` |
+| `gzip_comp_level` duplicate | dua file di `conf.d` menulis direktif sama | gabungkan ke satu file |
+| `X-Cache-Status` selalu MISS | respons punya `Set-Cookie` atau `Cache-Control: no-store` | sesuaikan `proxy_cache_valid`, cek header backend |
+| Semua request 429 setelah load test | token rate limit habis | tunggu 3 detik, atau naikkan `burst` |
+| Respons kecil tidak terkompres | di bawah `gzip_min_length 256` | normal, kompresi justru memperbesar |
 
----
-
-## FACT-CHECK
-
-Diuji di Debian 13.1, nginx 1.26.3, systemd 257, 14 November 2026.
-
-| Langkah | Klaim yang dicek | Status | Bukti | Sumber |
-|---|---|---|---|---|
-| 2.1.2 | `EnvironmentFile` dengan mode 600 dibaca systemd tanpa masalah | DIJALANKAN | `-rw------- 1 root root 10 /etc/hello/hello.env`; service `active`, `systemctl show -p User --value hello` → `ops` | https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html |
-| 2.1.3 | Service `Type=simple` dengan `User=ops` berjalan dan listen di loopback | DIJALANKAN | `ss -tlnp` → `users:(("python3",pid=2958,fd=3))`; `curl 127.0.0.1:8080` → JSON | https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html |
-| 2.1.4 | `Restart=on-failure` + `RestartSec=3` me-restart proses yang di-`kill -9` | DIJALANKAN | PID 2958 → 2974, `NRestarts=1`, journal `Scheduled restart job, restart counter is at 1` | https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html |
-| 2.2.1 | nginx 1.26.3 tersedia dan start sebagai service | DIJALANKAN | `nginx version: nginx/1.26.3`; `LISTEN 0 511 0.0.0.0:80` | https://nginx.org/en/docs/http/ngx_http_proxy_module.html |
-| 2.2.2 | `proxy_pass` + `server_name` dari `/etc/hosts` menghasilkan 200 | DIJALANKAN | `curl http://hello.lab.test/` → `{"app": "hello", ...}`; status `200` | https://nginx.org/en/docs/http/ngx_http_proxy_module.html |
-| 2.2.3 | UFW menolak port 80 sebelum rule dibuka, mengizinkan sesudahnya | DIJALANKAN | Sebelum: `curl` dari laptop `host_http=000 rc=28`; sesudah `ufw allow 80,443/tcp`: `ext_http=301` | https://manpages.debian.org/trixie/ufw/ufw.8.en.html |
-| 2.3.1 | `openssl req -x509 -addext subjectAltName` membuat cert dengan SAN benar | DIJALANKAN | `X509v3 Subject Alternative Name: DNS:hello.lab.test`; `notAfter=Nov 14 08:32:18 2027 GMT` | https://docs.openssl.org/3.5/man1/openssl-req/ |
-| 2.3.2 | Sintaks `http2 on;` diterima nginx 1.26.3 | DIJALANKAN | `nginx -t` → `test is successful`; respons `HTTP/2 200` | https://nginx.org/en/docs/http/ngx_http_ssl_module.html |
-| 2.3.3 | Redirect 80 → 443 berjalan | DIJALANKAN | `curl -o /dev/null -w '%{http_code} -> %{redirect_url}'` → `301 -> https://hello.lab.test/` | https://nginx.org/en/docs/http/ngx_http_ssl_module.html |
-| 2.3.4 | curl tanpa `-k` menolak self-signed | DIJALANKAN | `curl: (60) SSL certificate problem: self-signed certificate` | https://curl.se/docs/sslcerts.html |
-| 2.3.5 | `gzip on;` duplikat menggagalkan reload | DIJALANKAN | `[emerg] "gzip" directive is duplicate in /etc/nginx/conf.d/tuning.conf:1`; `Reload failed for nginx.service`; `grep -nE gzip /etc/nginx/nginx.conf` → `47: gzip on;` | https://nginx.org/en/docs/http/ngx_http_gzip_module.html |
-| 2.4.1 | `X-Cache-Status` membuktikan cache HIT | DIJALANKAN | 3x `x-cache-status: HIT` | https://nginx.org/en/docs/http/ngx_http_proxy_module.html |
-| 2.4.1b | Cache bertahan melewati `restart` dan berubah `EXPIRED` setelah TTL 10 detik | DIJALANKAN | Sebelum restart `MISS` → setelah `systemctl restart nginx` `HIT` → setelah `sleep 11` `EXPIRED` → request berikutnya `HIT` | https://nginx.org/en/docs/http/ngx_http_proxy_module.html |
-| 2.4.2 | gzip mengecilkan 2135 → 105 byte untuk `/big` | DIJALANKAN | `gzip_bytes=105`, `plain_bytes=2135`, `content-encoding: gzip` | https://nginx.org/en/docs/http/ngx_http_gzip_module.html |
-| 2.4.3 | `gzip_min_length 256` melewati respons kecil | DIJALANKAN | Tanpa `content-encoding` pada `/` (73 byte) | https://nginx.org/en/docs/http/ngx_http_gzip_module.html |
-| 2.4.4 | `limit_req_status 429` membuat nginx membalas 429 | DIJALANKAN | `"GET / HTTP/1.1" 429 162`; 63.508 Non-2xx dari 63.627 request | https://nginx.org/en/docs/http/ngx_http_limit_req_module.html |
-| 2.4.5 | Baseline tanpa limit lebih lambat dari saat limit (karena 429 dijawab langsung) | DIJALANKAN | Tanpa limit: `Requests/sec: 4619.56`; dengan limit: `6348.51` | https://github.com/wg/wrk |
-| 2.4.6 | Rate limit per-IP tidak menghukum IP lain | DIJALANKAN | Dari laptop saat server kena limit: `ext_https=200` | https://nginx.org/en/docs/http/ngx_http_limit_req_module.html |
-| 2.4.7 | Setelah uji beban, IP sendiri dapat 429 selama beberapa detik | DIJALANKAN | `curl` tepat setelah wrk → `429`; `sleep 3` → `200` | https://nginx.org/en/docs/http/ngx_http_limit_req_module.html |
-| 2.4.8 | `nginx -T` membuktikan direktif termuat | DIJALANKAN | `grep -c` mengembalikan 2 dari 3 pola (`gzip_comp_level 5` tidak muncul karena `nginx -T` mencetak nilai default berbeda) — lihat catatan | https://nginx.org/en/docs/switches.html |
-| 2.3.6 | Certbot HTTP-01 butuh domain publik | DOKUMENTASI | Tidak dijalankan (domain `.test` tidak dapat divalidasi) | https://certbot.eff.org/instructions |
-| 2.3.7 | Cloudflare Tunnel butuh akun Cloudflare | DOKUMENTASI | Tidak dijalankan | https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/ |
-
-Catatan 2.4.8: dari tiga pola, hanya `limit_req zone=hello_rl` dan
-`proxy_cache hello_cache` yang cocok; `gzip_comp_level 5` tidak muncul utuh
-karena `nginx -T` menormalkan nilai. Verifikasi yang lebih tepat:
-`nginx -T | grep -A1 'gzip_comp_level'` atau cukup andalkan bukti byte gzip
-(105 vs 2135) yang sudah DIJALANKAN.
+Jebakan:
+- `limit_req_status` default 503. Monitoring akan membaca itu sebagai server
+  down. Pakai 429.
+- Rate limit dihitung per IP. Setelah wrk, IP Anda sendiri masih kena 429 selama
+  beberapa detik.
+- `systemctl restart nginx` tidak mengosongkan cache. Isinya di
+  `/var/cache/nginx/site`, kedaluwarsa mengikuti `proxy_cache_valid`.
+- Kompresi hanya untuk tipe di `gzip_types`. Tambahkan sendiri kalau backend
+  mengirim tipe lain.
