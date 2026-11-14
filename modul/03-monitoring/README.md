@@ -7,7 +7,7 @@ Total 70 menit untuk keempat sub-topik.
 Konvensi:
 - `<domain>` nama host contoh `app.lab.test`, `<IP-VM>` IP VM.
 - Semua perintah sebagai `root`.
-- OS uji Debian 13.1, 1 vCPU. Detail: `verifikasi/FACT-CHECK.md`.
+- OS acuan Debian 13.1, systemd 257, 1 vCPU.
 
 ---
 
@@ -144,7 +144,7 @@ systemctl is-enabled netdata
 netdata -v
 curl -s http://127.0.0.1:19999/api/v1/info | head -c 200
 ss -tlnp | grep 19999
-ps -o pid,rss,comm -C netdata        # RSS sekitar 60 MB di uji
+ps -o pid,rss,comm -C netdata        # RSS sekitar 60 MB
 ```
 
 Buka dashboard tanpa membuka ke publik (kalau UFW terpasang):
@@ -201,7 +201,7 @@ wrk -t2 -c20 -d5s --latency http://127.0.0.1:8080/big.txt
 ab -q -n 500 -c20 -k http://127.0.0.1:8080/big.txt
 ```
 
-Angka uji di Debian 13.1, 1 vCPU: nginx menyajikan file 4 KB sekitar 7.700
+Angka acuan di Debian 13.1, 1 vCPU: nginx menyajikan file 4 KB sekitar 7.700
 req/s, sedangkan `python3 -m http.server` sekitar 1.100 req/s. Selisih itu bukan
 tuning, itu batas server contoh.
 

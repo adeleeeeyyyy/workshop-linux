@@ -9,7 +9,7 @@ Konvensi seluruh modul:
 - `<user>` nama user admin Anda, mis. `adly`.
 - `<IP-VM>` IP VM, mis. `10.10.10.20`.
 - Semua perintah dijalankan sebagai `root` (login root atau `su -`).
-- OS uji Debian 13.1. Versi paket dan status uji ada di `verifikasi/FACT-CHECK.md`.
+- OS acuan Debian 13.1, OpenSSH 10.0p2.
 
 ---
 

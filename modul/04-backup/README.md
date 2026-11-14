@@ -7,7 +7,7 @@ Total 80 menit untuk keempat sub-topik.
 Konvensi:
 - `<path>` direktori yang dibackup, mis. `/etc/nginx` atau `/opt/app`.
 - Semua perintah sebagai `root`.
-- OS uji Debian 13.1. Detail: `verifikasi/FACT-CHECK.md`.
+- OS acuan Debian 13.1, cron 3.0pl1, sqlite3 3.46.1.
 
 ---
 

@@ -41,17 +41,8 @@ Total 5 jam 35 menit. Satu hari dengan istirahat.
 - Satu mesin kedua untuk menguji firewall, fail2ban, dan load test.
 
 Sub-topik yang butuh akun pihak ketiga: Tailscale (1.5), Let's Encrypt dan
-Cloudflare Tunnel (2.3), bot Telegram atau webhook Discord (4.4).
-
-## Status uji
-
-Perintah dijalankan di Debian 13.1, 1 vCPU, 1 GB RAM, kecuali yang ditandai
-DOKUMENTASI. Output asli per langkah dan sumber resminya ada di
-[verifikasi/FACT-CHECK.md](verifikasi/FACT-CHECK.md).
-
-Belum diuji: Tailscale sampai login selesai, WireGuard (modul kernel tidak ada
-di container uji), Certbot dan Cloudflare Tunnel (butuh domain publik), kirim
-nyata ke Telegram atau Discord (token asli), k6, dan `pg_dump`/`mysqldump`.
+Cloudflare Tunnel (2.3), bot Telegram atau webhook Discord (4.4). Ketiganya
+bertanda DOKUMENTASI karena tidak bisa diuji tanpa akun.
 
 ## Cheat sheet
 

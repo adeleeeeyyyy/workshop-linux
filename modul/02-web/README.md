@@ -8,7 +8,7 @@ Total 95 menit untuk keempat sub-topik.
 Konvensi:
 - `<IP-VM>` IP VM, `<domain>` nama host contoh `app.lab.test`.
 - Semua perintah sebagai `root`.
-- OS uji Debian 13.1, nginx 1.26.3. Detail: `verifikasi/FACT-CHECK.md`.
+- OS acuan Debian 13.1, nginx 1.26.3, systemd 257.
 
 ---
 
@@ -377,7 +377,7 @@ wrk -t2 -c20 -d5s http://<domain>/big.txt | grep -E 'requests in|Non-2xx|Request
 grep -c ' 429 ' /var/log/nginx/access.log
 ```
 
-Angka uji di Debian 13.1, 1 vCPU: 4096 byte menjadi 72 byte, cache urutan
+Angka acuan di Debian 13.1, 1 vCPU: 4096 byte menjadi 72 byte, cache urutan
 `MISS, HIT, HIT`, 43.588 dari 43.658 request dapat 429, dan request tunggal
 kembali 200 setelah 3 detik.
 
