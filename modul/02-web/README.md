@@ -3,8 +3,6 @@
 Setiap sub-topik berdiri sendiri. Backend contoh disediakan di dalam tiap
 sub-topik, jadi tidak ada ketergantungan antar bagian.
 
-Total 95 menit untuk keempat sub-topik.
-
 Konvensi:
 - `<IP-VM>` IP VM, `<domain>` nama host contoh `app.lab.test`.
 - Semua perintah sebagai `root`.
@@ -12,7 +10,7 @@ Konvensi:
 
 ---
 
-## 2.1 Menjalankan aplikasi sebagai systemd service · 25 menit
+## 2.1 Menjalankan aplikasi sebagai systemd service
 
 Hasil: aplikasi jalan otomatis saat boot, restart sendiri saat crash, log masuk
 journal, dan berjalan sebagai user non-root.
@@ -116,7 +114,7 @@ Jebakan:
 
 ---
 
-## 2.2 Reverse proxy nginx dan pemetaan domain lokal · 20 menit
+## 2.2 Reverse proxy nginx dan pemetaan domain lokal
 
 Hasil: `http://<domain>` dilayani nginx dan diteruskan ke aplikasi di port 8080.
 
@@ -192,7 +190,7 @@ Jebakan:
 
 ---
 
-## 2.3 HTTPS · 20 menit
+## 2.3 HTTPS
 
 Hasil: situs dilayani HTTPS. Self-signed untuk lab internal, Let's Encrypt untuk
 domain publik.
@@ -294,7 +292,7 @@ Jebakan:
 
 ---
 
-## 2.4 gzip, cache, dan rate limit · 30 menit
+## 2.4 gzip, cache, dan rate limit
 
 Hasil: respons dikompres, konten di-cache, dan request berlebih ditolak 429.
 

@@ -2,8 +2,6 @@
 
 Setiap sub-topik berdiri sendiri, tanpa prasyarat dari modul lain.
 
-Total 70 menit untuk keempat sub-topik.
-
 Konvensi:
 - `<domain>` nama host contoh `app.lab.test`, `<IP-VM>` IP VM.
 - Semua perintah sebagai `root`.
@@ -11,7 +9,7 @@ Konvensi:
 
 ---
 
-## 3.1 Membaca log dengan journalctl dan /var/log · 15 menit
+## 3.1 Membaca log dengan journalctl dan /var/log
 
 Hasil: bisa menemukan penyebab masalah dari log tanpa menebak.
 
@@ -70,7 +68,7 @@ Jebakan:
 
 ---
 
-## 3.2 Audit resource: htop, df, ncdu, ss · 15 menit
+## 3.2 Audit resource: htop, df, ncdu, ss
 
 Hasil: menjawab "server lambat" dan "disk penuh" dalam hitungan detik.
 
@@ -122,7 +120,7 @@ Jebakan:
 
 ---
 
-## 3.3 Dashboard monitoring dengan Netdata · 20 menit
+## 3.3 Dashboard monitoring dengan Netdata
 
 Hasil: satu halaman berisi grafik CPU, RAM, disk, jaringan, dan nginx.
 
@@ -174,7 +172,7 @@ Jebakan:
 
 ---
 
-## 3.4 Load test dengan wrk dan ab · 20 menit
+## 3.4 Load test dengan wrk dan ab
 
 Hasil: tahu batas server sebelum pengguna menemukannya, dan bisa membaca
 hasilnya dengan benar.

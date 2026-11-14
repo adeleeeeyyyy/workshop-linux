@@ -25,14 +25,12 @@ sebagian besar sama, kecuali nama paket dan socket activation SSH.
 
 ## Daftar modul
 
-| Modul | Sub-topik | Waktu |
-|---|---|---|
-| [1. Security Hardening](modul/01-hardening/README.md) | user dan sudo, SSH key, UFW, Fail2Ban, Tailscale | 90 menit |
-| [2. Web dan Performance](modul/02-web/README.md) | systemd service, nginx reverse proxy, HTTPS, gzip, cache, rate limit | 95 menit |
-| [3. Monitoring dan Stress Test](modul/03-monitoring/README.md) | journalctl, audit resource, Netdata, wrk | 70 menit |
-| [4. Backup, Alerting, Automation](modul/04-backup/README.md) | update otomatis, script backup, cron, restore, notifikasi | 80 menit |
-
-Total 5 jam 35 menit. Satu hari dengan istirahat.
+| Modul | Sub-topik |
+|---|---|
+| [1. Security Hardening](modul/01-hardening/README.md) | user dan sudo, SSH key, UFW, Fail2Ban, Tailscale |
+| [2. Web dan Performance](modul/02-web/README.md) | systemd service, nginx reverse proxy, HTTPS, gzip, cache, rate limit |
+| [3. Monitoring dan Stress Test](modul/03-monitoring/README.md) | journalctl, audit resource, Netdata, wrk |
+| [4. Backup, Alerting, Automation](modul/04-backup/README.md) | update otomatis, script backup, cron, restore, notifikasi |
 
 ## Prasyarat umum
 

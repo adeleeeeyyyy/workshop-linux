@@ -2,8 +2,6 @@
 
 Setiap sub-topik berdiri sendiri. Tidak ada prasyarat dari modul lain.
 
-Total 80 menit untuk keempat sub-topik.
-
 Konvensi:
 - `<path>` direktori yang dibackup, mis. `/etc/nginx` atau `/opt/app`.
 - Semua perintah sebagai `root`.
@@ -11,7 +9,7 @@ Konvensi:
 
 ---
 
-## 4.1 Update keamanan otomatis · 15 menit
+## 4.1 Update keamanan otomatis
 
 Hasil: patch keamanan terpasang sendiri tiap hari, tanpa `apt upgrade` manual.
 
@@ -67,7 +65,7 @@ Jebakan:
 
 ---
 
-## 4.2 Script backup file dan database · 25 menit
+## 4.2 Script backup file dan database
 
 Hasil: satu script yang membuat arsip, memverifikasi integritasnya, dan
 memangkas arsip lama.
@@ -165,7 +163,7 @@ Jebakan:
 
 ---
 
-## 4.3 Jadwal cron dan simulasi disaster recovery · 20 menit
+## 4.3 Jadwal cron dan simulasi disaster recovery
 
 Hasil: backup jalan otomatis, dan Anda pernah melakukan restore.
 
@@ -234,7 +232,7 @@ Jebakan:
 
 ---
 
-## 4.4 Notifikasi ke Telegram atau Discord · 20 menit
+## 4.4 Notifikasi ke Telegram atau Discord
 
 Hasil: server mengirim pesan sendiri saat ada kondisi yang perlu perhatian.
 

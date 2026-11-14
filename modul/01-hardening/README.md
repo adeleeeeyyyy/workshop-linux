@@ -3,8 +3,6 @@
 Setiap sub-topik berdiri sendiri. Jalankan dari VM yang baru di-install, tanpa
 bergantung pada sub-topik lain.
 
-Total 90 menit untuk kelima sub-topik.
-
 Konvensi seluruh modul:
 - `<user>` nama user admin Anda, mis. `adly`.
 - `<IP-VM>` IP VM, mis. `10.10.10.20`.
@@ -13,7 +11,7 @@ Konvensi seluruh modul:
 
 ---
 
-## 1.1 User admin non-root dan sudo · 15 menit
+## 1.1 User admin non-root dan sudo
 
 Hasil: satu user `<user>` yang bisa menjalankan perintah admin lewat `sudo`.
 
@@ -51,7 +49,7 @@ Jebakan: `usermod -G sudo <user>` mengganti seluruh grup tambahan user. Pakai
 
 ---
 
-## 1.2 SSH key dan matikan login root · 20 menit
+## 1.2 SSH key dan matikan login root
 
 Hasil: login hanya dengan key, root tidak bisa login langsung, hanya `<user>`
 yang boleh masuk.
@@ -112,7 +110,7 @@ Jebakan:
 
 ---
 
-## 1.3 Firewall dengan UFW · 15 menit
+## 1.3 Firewall dengan UFW
 
 Hasil: semua port masuk ditolak kecuali yang dibuka eksplisit.
 
@@ -168,9 +166,10 @@ Jebakan:
 
 ---
 
-## 1.4 Blokir brute-force dengan Fail2Ban · 20 menit
+## 1.4 Blokir brute-force dengan Fail2Ban
 
-Hasil: IP yang gagal login berulang diblokir otomatis 10 menit.
+Hasil: IP yang gagal login berulang diblokir otomatis sesuai `bantime` di
+`jail.local`.
 
 Prasyarat: root, SSH aktif, satu mesin lain untuk menguji serangan.
 
@@ -232,7 +231,7 @@ Jebakan:
 
 ---
 
-## 1.5 Akses privat dengan Tailscale · 20 menit
+## 1.5 Akses privat dengan Tailscale
 
 Hasil: VM punya IP privat `100.x` yang bisa diakses perangkat lain tanpa membuka
 port di firewall publik.
