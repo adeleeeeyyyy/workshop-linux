@@ -3,8 +3,12 @@
 Setiap sub-topik berdiri sendiri, tanpa prasyarat dari modul lain.
 
 Konvensi:
-- `<domain>` nama host contoh `app.lab.test`, `<IP-VM>` IP VM.
-- Semua perintah sebagai `root`.
+- `<IP-VM>` IP VM, `<subnet-admin>` subnet PC Anda, mis. `192.168.20.0/24`.
+- Label **[Server]** dijalankan di VM sebagai `root`. Label **[PC Windows]**
+  dijalankan di PowerShell Windows 10/11 (padanan Linux atau macOS ada di
+  README utama).
+- File konfigurasi ditulis sebagai `File: <path>` lalu isinya. Edit sendiri
+  dengan `nano <path>`, simpan `Ctrl+O` `Enter`, keluar `Ctrl+X`.
 - OS acuan Debian 13.1, systemd 257, 1 vCPU.
 
 ---
@@ -12,6 +16,12 @@ Konvensi:
 ## 3.1 Membaca log dengan journalctl dan /var/log
 
 Hasil: bisa menemukan penyebab masalah dari log tanpa menebak.
+
+Paket: `nginx` (hanya sebagai sumber log contoh).
+
+```bash
+apt-get install -y nginx
+```
 
 Prasyarat: root, systemd sebagai init (`ps -p 1 -o comm=` menghasilkan `systemd`).
 
@@ -72,11 +82,15 @@ Jebakan:
 
 Hasil: menjawab "server lambat" dan "disk penuh" dalam hitungan detik.
 
-Prasyarat: root.
+Paket: `htop` dan `ncdu`.
 
 ```bash
 apt-get install -y htop ncdu
+```
 
+Prasyarat: root.
+
+```bash
 htop              # interaktif: q keluar, F6 urutkan, F4 filter
 ncdu /var         # interaktif: c urut jumlah, d hapus, q keluar
 ```
@@ -124,6 +138,13 @@ Jebakan:
 
 Hasil: satu halaman berisi grafik CPU, RAM, disk, jaringan, dan nginx.
 
+Paket: `curl` (dipakai script instalasi Netdata). Netdata sendiri dipasang
+oleh script resmi, bukan lewat `apt-get install`.
+
+```bash
+apt-get install -y curl
+```
+
 Prasyarat: root, internet keluar.
 
 ```bash
@@ -134,7 +155,7 @@ sh /tmp/netdata-kickstart.sh --non-interactive --stable-channel --disable-teleme
 `--disable-telemetry` mematikan pengiriman metrik ke Netdata Cloud. Paket
 `netdata` tidak ada di repo Debian, jadi script ini satu-satunya cara resmi.
 
-Verifikasi:
+Verifikasi di **[Server]**:
 
 ```bash
 systemctl is-active netdata
@@ -152,14 +173,19 @@ ufw allow from <subnet-admin> to any port 19999 proto tcp
 ufw status numbered
 ```
 
-Lalu akses `http://<IP-VM>:19999/` dari PC di subnet itu.
+Lalu dari **[PC Windows]**, buka `http://<IP-VM>:19999/` di browser, atau cek
+dari PowerShell:
+
+```powershell
+Test-NetConnection <IP-VM> -Port 19999      # TcpTestSucceeded : True
+```
 
 Error umum:
 
 | Gejala | Sebab | Solusi |
 |---|---|---|
 | `systemctl is-active` failed | instalasi setengah jalan atau port dipakai | `journalctl -u netdata -n 40`, `ss -tlnp \| grep 19999` |
-| Dashboard tidak terbuka dari PC | UFW belum mengizinkan 19999 | `ufw allow from <subnet> to any port 19999 proto tcp` |
+| Dashboard tidak terbuka dari PC | UFW belum mengizinkan 19999 | `ufw allow from <subnet-admin> to any port 19999 proto tcp` |
 | RAM penuh setelah install | VM di bawah 1 GB | tambah RAM, atau turunkan retensi Netdata |
 
 Jebakan:
@@ -177,21 +203,41 @@ Jebakan:
 Hasil: tahu batas server sebelum pengguna menemukannya, dan bisa membaca
 hasilnya dengan benar.
 
-Prasyarat: root, satu target HTTP. Kalau belum ada, siapkan dua target
-pembanding:
+Paket: `wrk`, `apache2-utils` (berisi `ab`), `python3`, `curl`.
+
+```bash
+apt-get install -y wrk apache2-utils python3 curl
+```
+
+Prasyarat: root, satu target HTTP. Kalau belum ada, siapkan target contoh di
+**[Server]**:
 
 ```bash
 mkdir -p /srv/backend
-printf 'backend ok\n' > /srv/backend/index.html
-yes 'data uji gzip untuk nginx' | head -c 4096 > /srv/backend/big.txt
-cd /srv/backend && nohup python3 -m http.server 8080 --bind 127.0.0.1 >/dev/null 2>&1 &
-sleep 2
-curl -s http://127.0.0.1:8080/
+nano /srv/backend/index.html
+
+# file teks 4 KB untuk target uji, bawaan Debian
+head -c 4096 /usr/share/common-licenses/GPL-3 > /srv/backend/big.txt
 ```
 
-```bash
-apt-get install -y wrk apache2-utils
+File: `/srv/backend/index.html`
 
+```text
+backend ok
+```
+
+Jalankan target di sesi SSH kedua dan biarkan terbuka (`Ctrl+C` untuk berhenti):
+
+```bash
+python3 -m http.server 8080 --bind 127.0.0.1 --directory /srv/backend
+```
+
+Dari sesi pertama, pastikan hidup: `curl -s http://127.0.0.1:8080/`.
+
+Beban dijalankan dari VM sendiri, karena `wrk` dan `ab` tidak tersedia di
+Windows:
+
+```bash
 # 2 thread, 20 koneksi, 5 detik
 wrk -t2 -c20 -d5s --latency http://127.0.0.1:8080/big.txt
 
@@ -224,21 +270,34 @@ Jebakan:
   bersih.
 - Angka RPS tanpa melihat `Non-2xx` menyesatkan. 429 dijawab nginx tanpa
   menyentuh backend, jadi terlihat lebih cepat.
-- Load test di mesin yang sama dengan yang diuji membuat SSH tersendat. Jalankan
-  dari VM lain, durasi 5 sampai 10 detik.
+- Load test di mesin yang sama dengan yang diuji membuat SSH tersendat dan
+  hasilnya bias. Pakai durasi 5 sampai 10 detik.
 
 ### k6 (demo instruktur)
 
+Paket: `gnupg`, `curl`.
+
 ```bash
-apt-get install -y gnupg
+apt-get install -y gnupg curl
 curl -fsSL https://dl.k6.io/key.gpg | gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
-  > /etc/apt/sources.list.d/k6.list
+```
+
+Tambahkan repo k6.
+
+File: `/etc/apt/sources.list.d/k6.list`
+
+```text
+deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main
+```
+
+```bash
 apt-get update && apt-get install -y k6
 k6 version
 ```
 
-Skrip minimal `load.js`:
+Skrip minimal.
+
+File: `load.js` (di direktori kerja Anda)
 
 ```javascript
 import http from 'k6/http';
