@@ -5,7 +5,7 @@ bergantung pada sub-topik lain.
 
 Konvensi seluruh modul:
 - `<user>` nama user admin Anda, mis. `adly`.
-- `<IP-VM>` IP VM, mis. `10.10.10.20`.
+- `<IP-VM>` IP VM, mis. `172.23.x.x`.
 - `<IP-PC>` IP PC Anda, `<subnet-admin>` subnet PC Anda, mis. `192.168.20.0/24`.
 - Label **[Server]** dijalankan di VM sebagai `root` (login root atau `su -`).
 - Label **[PC Windows]** dijalankan di PowerShell Windows 10/11. OpenSSH client
